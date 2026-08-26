@@ -1,0 +1,38 @@
+node_modules/
+.DS_Store
+
+# The native projects ARE committed. They started as `npx cap add` output, but
+# they now hold hand-written source that no command regenerates:
+#   android/app/src/main/java/it/ustyle/portal/MainActivity.java   offline + chrome
+#   android/app/src/main/java/it/ustyle/portal/PortalLock.java     biometric lock
+#   android/app/src/main/res/layout/{offline,lock}_overlay.xml
+#   plus edits to strings.xml, AndroidManifest.xml, build.gradle, variables.gradle
+# Ignoring android/ would delete Phase 3 on the next clone. Only BUILD OUTPUT
+# and secrets are excluded below.
+
+# Build output
+android/build/
+android/app/build/
+android/.gradle/
+android/.idea/
+android/captures/
+android/local.properties          # SDK path, machine-specific
+ios/App/build/
+ios/App/Pods/
+ios/DerivedData/
+ios/App/App/public/               # copied from www/ by `cap sync`
+
+# Secrets and signing material — never commit these.
+*.keystore
+*.jks
+*.p8
+*.p12
+*.mobileprovision
+android/app/google-services.json
+# GCP service-account keys are named <project>-<hash>.json and carry a PRIVATE
+# KEY. One was dropped in android/app/ by mistake; a broad rule is cheap
+# insurance against that ever reaching a commit.
+*-[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]*.json
+service-account*.json
+ios/App/App/GoogleService-Info.plist
+*.bak

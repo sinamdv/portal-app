@@ -1,0 +1,15 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Ustyle</string>
+    <string name="title_activity_main">Ustyle</string>
+    <string name="package_name">it.ustyle.portal</string>
+    <string name="custom_url_scheme">it.ustyle.portal</string>
+    <string name="offline_title">You are offline</string>
+    <string name="offline_body">Ustyle needs a connection to show your latest numbers. Your data is safe — reconnect and pick up where you left off.</string>
+    <string name="offline_retry">Try again</string>
+    <string name="lock_title">Locked</string>
+    <string name="lock_body">Unlock to see your store’s numbers.</string>
+    <string name="lock_unlock">Unlock</string>
+    <string name="lock_prompt_title">Unlock Ustyle</string>
+    <string name="lock_prompt_subtitle">Your store data is private to you.</string>
+</resources>
