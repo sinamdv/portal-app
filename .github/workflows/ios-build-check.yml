@@ -122,19 +122,32 @@ jobs:
           fi
           echo "RESULT: THE APP DIED"
           echo
-          echo "=========== CRASH REPORT ==========="
+          echo "=========== CRASH REPORT (full) ==========="
           FOUND=0
           for f in ~/Library/Logs/DiagnosticReports/App-*.ips; do
             [ -e "$f" ] || continue
             FOUND=1
-            # The first JSON line is metadata; the useful part is exceptionType,
-            # termination reason and the crashed thread.
-            grep -oE '"exceptionType"[^,]*|"signal"[^,]*|"reason"[^,]*|"terminationReason"[^,]*' "$f" | head -8
-            echo "--- first frames ---"
-            grep -oE '"imageIndex"[^}]*' "$f" | head -5
+            # Resolve each frame to its binary so we can see whether the fault is
+            # in our code, in Capacitor, or inside WebKit.
+            python3 - "$f" <<'PY'
+import json, sys
+raw = open(sys.argv[1]).read().split("
+", 1)
+body = json.loads(raw[1])
+print("exception :", body.get("exception"))
+print("termination:", body.get("termination"))
+imgs = body.get("usedImages", [])
+ft = body.get("faultingThread", 0)
+threads = body.get("threads", [])
+if ft < len(threads):
+    print("--- faulting thread", ft, "---")
+    for fr in threads[ft].get("frames", [])[:25]:
+        i = fr.get("imageIndex", -1)
+        name = imgs[i].get("name", "?") if 0 <= i < len(imgs) else "?"
+        print(f"  {name:32} +{fr.get('imageOffset')}  {fr.get('symbol','')}")
+PY
           done
-          [ "$FOUND" = "1" ] || echo "(no .ips crash report - the app exited without crashing)"
-          echo
+          [ "$FOUND" = "1" ] || echo "(no .ips crash report found)"
           echo "=========== WHAT THE APP ITSELF LOGGED ==========="
           xcrun simctl spawn "$UDID" log show --last 3m --style compact --predicate 'processImagePath CONTAINS "App.app"' 2>/dev/null | tail -40 || true
           echo
