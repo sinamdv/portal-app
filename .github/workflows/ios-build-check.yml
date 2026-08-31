@@ -93,6 +93,37 @@ jobs:
           grep -q 'customModuleProvider="target"' "$SB" || { echo "FAIL: customModuleProvider=\"target\" missing - the app will crash on launch"; exit 1; }
           echo "OK - storyboard resolves PortalViewController from the app target"
 
+      # A green build says the code COMPILES. It says nothing about whether the
+      # app can start - storyboard wiring, missing Info.plist keys and bad
+      # selectors all fail at runtime. So actually boot a simulator and launch
+      # it, then dump whatever iOS logged. Non-fatal: we want the log either way.
+      - name: Launch it in a simulator and capture any crash
+        continue-on-error: true
+        run: |
+          set +e
+          UDID=$(xcrun simctl list devices available | grep -m1 -oE "iPhone [0-9]+[^(]*\(([0-9A-F-]{36})\)" | grep -oE "[0-9A-F-]{36}")
+          if [ -z "$UDID" ]; then UDID=$(xcrun simctl list devices available | grep -m1 -oE "[0-9A-F]{8}-[0-9A-F-]{27}"); fi
+          echo "simulator: $UDID"
+          xcrun simctl boot "$UDID"
+          xcrun simctl bootstatus "$UDID" -b
+          APP=ios/App/build/Build/Products/Debug-iphonesimulator/App.app
+          xcrun simctl install "$UDID" "$APP" && echo "installed OK"
+          echo "----- launching -----"
+          xcrun simctl launch --console-pty "$UDID" it.ustyle.portal &
+          LAUNCH_PID=$!
+          sleep 20
+          kill $LAUNCH_PID 2>/dev/null
+          echo "----- is it still running? -----"
+          xcrun simctl spawn "$UDID" launchctl list 2>/dev/null | grep -i ustyle || echo "NOT RUNNING (it exited)"
+          echo "----- system log for the app -----"
+          xcrun simctl spawn "$UDID" log show --last 2m --style compact 2>/dev/null | grep -iE "ustyle|PortalViewController|Unknown class|NSInvalidArgument|fatal|Terminating|exception" | head -40
+          echo "----- crash reports -----"
+          ls -1 ~/Library/Logs/DiagnosticReports/ 2>/dev/null | head
+          for f in ~/Library/Logs/DiagnosticReports/App*.ips; do
+            [ -e "$f" ] || continue
+            echo "=== $f ==="; head -60 "$f"
+          done
+
       - name: Package the .app for Appetize
         run: |
           cd ios/App/build/Build/Products/Debug-iphonesimulator
