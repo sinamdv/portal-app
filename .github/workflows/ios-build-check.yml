@@ -54,6 +54,8 @@ jobs:
             -destination 'generic/platform=iOS Simulator' \
             -configuration Debug \
             -derivedDataPath build \
+            ONLY_ACTIVE_ARCH=NO \
+            ARCHS="x86_64 arm64" \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             build \
@@ -129,6 +131,8 @@ jobs:
           cd ios/App/build/Build/Products/Debug-iphonesimulator
           zip -r -q "$GITHUB_WORKSPACE/App-simulator.zip" App.app
           echo "zipped: $(du -h "$GITHUB_WORKSPACE/App-simulator.zip" | cut -f1)"
+          echo "architectures in the binary:"
+          lipo -info App.app/App || file App.app/App
 
       - name: Upload the simulator build
         uses: actions/upload-artifact@v4
