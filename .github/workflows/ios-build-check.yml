@@ -135,7 +135,7 @@ jobs:
           echo
           echo "=========== HARD FAILURE SIGNATURES ==========="
           xcrun simctl spawn "$UDID" log show --last 3m --style compact 2>/dev/null > /tmp/full.log || true
-          grep -aiE "Unknown class|uncaught exception|NSInvalidArgument|Library not loaded|Symbol not found|dyld[|Fatal error|SIGABRT|EXC_" /tmp/full.log | head -20 || echo "(none found)"
+          grep -aiE "Unknown class|uncaught exception|NSInvalidArgument|Library not loaded|Symbol not found|dyld:|Fatal error|SIGABRT|EXC_" /tmp/full.log | head -20 || echo "(none found)"
           exit 1
 
       - name: Upload crash reports

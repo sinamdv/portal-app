@@ -306,7 +306,22 @@ class PortalViewController: CAPBridgeViewController {
     }
 
     deinit {
-        monitor.cancel()
+        // DO NOT call monitor.cancel() here. Doing so segfaults:
+        //   EXC_BAD_ACCESS / KERN_INVALID_ADDRESS at 0x18, with
+        //   NWPathMonitor.cancel() on top of __deallocating_deinit.
+        // By the time deinit runs the monitor's internals are already being
+        // torn down, so cancel() dereferences freed memory. It is also
+        // unnecessary: the monitor is owned by this controller and stops when
+        // it deallocates, and its handler captures self weakly, so nothing
+        // keeps either alive.
         NotificationCenter.default.removeObserver(self)
+    }
+
+    /// Cancel while the object is still fully alive — the safe moment deinit is not.
+    override func viewDidDisappear(_ animated: Bool) {
+        super.viewDidDisappear(animated)
+        if isBeingDismissed || isMovingFromParent {
+            monitor.cancel()
+        }
     }
 }
