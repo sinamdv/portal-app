@@ -33,6 +33,8 @@ class PortalViewController: CAPBridgeViewController {
     private var unlocked = false
     private var prompting = false
     private var backgroundedAt: Date?
+    private var configuredWebView = false
+    private var reportedLayout = false
 
     /// Re-lock only after a real absence — locking on a 2-second app switch is hostile.
     private let graceInterval: TimeInterval = 15
@@ -42,6 +44,7 @@ class PortalViewController: CAPBridgeViewController {
     override func viewDidLoad() {
         super.viewDidLoad()
 
+        NSLog("USTYLE-DIAG viewDidLoad: webView is %@", webView == nil ? "NIL (settings will be skipped!)" : "present")
         applySafeAreaBackground()
         addPullToRefresh()
         offlineView = addOverlay(
@@ -75,8 +78,43 @@ class PortalViewController: CAPBridgeViewController {
     override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
         guard let webView = webView else { return }
+
+        // viewDidLoad may run before Capacitor creates the webview, in which
+        // case every webView?.… there is silently skipped. Applying here, once,
+        // guarantees the settings land on a webview that exists.
+        if !configuredWebView {
+            configuredWebView = true
+            applySafeAreaBackground()
+            addPullToRefresh()
+        }
+
         let inset = view.bounds.inset(by: view.safeAreaInsets)
         if webView.frame != inset { webView.frame = inset }
+
+        if !reportedLayout {
+            reportedLayout = true
+            // Assigning .frame is futile if Capacitor pins the webview with Auto
+            // Layout — the constraint system overwrites it on the next pass. This
+            // says whether the inset actually stuck.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [weak self] in
+                guard let self = self, let wv = self.webView else { return }
+                NSLog("USTYLE-DIAG safeArea=%@ viewBounds=%@ webViewFrame=%@ translatesAutoresizing=%@",
+                      NSCoder.string(for: UIEdgeInsets(top: self.view.safeAreaInsets.top,
+                                                       left: self.view.safeAreaInsets.left,
+                                                       bottom: self.view.safeAreaInsets.bottom,
+                                                       right: self.view.safeAreaInsets.right)),
+                      NSCoder.string(for: self.view.bounds),
+                      NSCoder.string(for: wv.frame),
+                      wv.translatesAutoresizingMaskIntoConstraints ? "YES" : "NO(constraints win)")
+                NSLog("USTYLE-DIAG zoom=%.2f min=%.2f max=%.2f pinchEnabled=%@ contentInsetBehavior=%ld",
+                      wv.scrollView.zoomScale, wv.scrollView.minimumZoomScale, wv.scrollView.maximumZoomScale,
+                      (wv.scrollView.pinchGestureRecognizer?.isEnabled ?? false) ? "YES(zoom possible)" : "NO",
+                      wv.scrollView.contentInsetAdjustmentBehavior.rawValue)
+                NSLog("USTYLE-DIAG contentSize=%@ scrollViewBounds=%@",
+                      NSCoder.string(for: wv.scrollView.contentSize),
+                      NSCoder.string(for: wv.scrollView.bounds))
+            }
+        }
     }
 
     override func viewDidAppear(_ animated: Bool) {

@@ -118,7 +118,10 @@ jobs:
           xcrun simctl launch "$UDID" it.ustyle.portal || true
           sleep 20
           if xcrun simctl spawn "$UDID" launchctl list 2>/dev/null | grep -q it.ustyle.portal; then
-            echo "RESULT: STILL RUNNING"; exit 0
+              echo "RESULT: STILL RUNNING"
+            echo "=========== RUNTIME DIAGNOSTICS ==========="
+            xcrun simctl spawn "$UDID" log show --last 2m --style compact 2>/dev/null | grep -a "USTYLE-DIAG" | head -20 || echo "(no diagnostics captured)"
+            exit 0
           fi
           echo "RESULT: THE APP DIED"
           echo
