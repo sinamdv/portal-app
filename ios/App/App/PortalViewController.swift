@@ -100,6 +100,18 @@ class PortalViewController: CAPBridgeViewController {
         // viewDidLayoutSubviews, so letting the scroll view add its own inset on
         // top would push the content down twice.
         webView?.scrollView.contentInsetAdjustmentBehavior = .never
+
+        // An APP should not pinch-zoom like a web page. The portal's viewport
+        // meta sets width=device-width with no maximum-scale, so WKWebView
+        // allows zooming - and once zoomed the page pans sideways, which reads
+        // as "the layout is broken and scrolls horizontally". Locking the zoom
+        // scale is the app's business, not the portal's, so this stays here.
+        webView?.scrollView.pinchGestureRecognizer?.isEnabled = false
+        webView?.scrollView.minimumZoomScale = 1
+        webView?.scrollView.maximumZoomScale = 1
+        webView?.scrollView.bouncesZoom = false
+        // Stop sideways rubber-banding on a page that fits exactly.
+        webView?.scrollView.alwaysBounceHorizontal = false
     }
 
     // MARK: - Pull to refresh
