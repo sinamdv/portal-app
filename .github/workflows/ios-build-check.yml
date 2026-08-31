@@ -61,8 +61,23 @@ jobs:
         # a failing xcodebuild would be masked by tee's exit code.
         shell: bash --noprofile --norc -eo pipefail {0}
 
-      - name: Upload the build log on failure
-        if: failure()
+      # A green build proves nothing if our file was never in the target. The
+      # project.pbxproj registration was hand-written, and an unregistered file
+      # is silently skipped - so assert the compiler actually saw it.
+      - name: Verify PortalViewController.swift was compiled
+        run: |
+          cd ios/App
+          if grep -q "PortalViewController.swift" build.log; then
+            echo "OK - the compiler processed PortalViewController.swift"
+            grep -m3 "PortalViewController" build.log
+          else
+            echo "FAIL - PortalViewController.swift never reached the compiler."
+            echo "It is missing from the App target in project.pbxproj."
+            exit 1
+          fi
+
+      - name: Upload the build log
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: xcodebuild-log
