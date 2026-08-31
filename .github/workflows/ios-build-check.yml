@@ -81,6 +81,18 @@ jobs:
       # restriction - so this artifact is testable from a browser with no Apple
       # Developer account and no Mac. Zipped because a .app is a DIRECTORY and
       # upload-artifact would otherwise flatten it into loose files.
+      # A storyboard class reference is resolved at RUNTIME, so a wrong one
+      # compiles fine and then crashes on launch with "Unknown class ...".
+      # customModuleProvider="target" is what tells UIKit the class lives in
+      # THIS app target; without it "App" is read as a framework name and the
+      # class is never found. Cost us one crash - assert it stays.
+      - name: Verify the storyboard class reference is complete
+        run: |
+          SB=ios/App/App/Base.lproj/Main.storyboard
+          grep -q 'customClass="PortalViewController"' "$SB" || { echo "FAIL: storyboard does not point at PortalViewController"; exit 1; }
+          grep -q 'customModuleProvider="target"' "$SB" || { echo "FAIL: customModuleProvider=\"target\" missing - the app will crash on launch"; exit 1; }
+          echo "OK - storyboard resolves PortalViewController from the app target"
+
       - name: Package the .app for Appetize
         run: |
           cd ios/App/build/Build/Products/Debug-iphonesimulator
