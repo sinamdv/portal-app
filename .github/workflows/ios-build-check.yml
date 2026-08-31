@@ -104,36 +104,54 @@ jobs:
       # was meaningless. Launch DETACHED, let it live, then check whether the
       # process is still alive and dump any crash report. Fails the job if the
       # app died - a build that cannot stay running is not a passing build.
+      # Keep this output SHORT. An earlier version grepped for "Terminating",
+      # which matches unrelated simulator daemons hundreds of times and buried
+      # the actual crash. Only patterns that indicate OUR failure belong here.
       - name: Launch in a simulator and prove it stays running
         run: |
           set -e
           UDID=$(xcrun simctl list devices available | grep -m1 -oE "[0-9A-F]{8}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{12}")
-          echo "simulator: $UDID"
           xcrun simctl boot "$UDID" || true
           xcrun simctl bootstatus "$UDID" -b
-          APP=ios/App/build/Build/Products/Debug-iphonesimulator/App.app
-          xcrun simctl install "$UDID" "$APP"
-          BEFORE=$(date +%s)
-          PID=$(xcrun simctl launch "$UDID" it.ustyle.portal | sed "s/.*: //")
-          echo "launched with pid $PID"
+          xcrun simctl install "$UDID" ios/App/build/Build/Products/Debug-iphonesimulator/App.app
+          rm -f ~/Library/Logs/DiagnosticReports/App-*.ips 2>/dev/null || true
+          xcrun simctl launch "$UDID" it.ustyle.portal || true
           sleep 20
-          echo "----- alive after 20s? -----"
           if xcrun simctl spawn "$UDID" launchctl list 2>/dev/null | grep -q it.ustyle.portal; then
-            echo "STILL RUNNING - the app survived launch"
-            ALIVE=1
-          else
-            echo "DEAD - the app exited"
-            ALIVE=0
+            echo "RESULT: STILL RUNNING"; exit 0
           fi
-          echo "----- everything the app logged -----"
-          xcrun simctl spawn "$UDID" log show --last 3m --style compact --predicate 'processImagePath CONTAINS "App.app"' 2>/dev/null | tail -60 || true
-          echo "----- crash reports -----"
-          find ~/Library/Logs/DiagnosticReports -name "App*" -newermt "-10 minutes" 2>/dev/null | while read f; do
-            echo "=== $f ==="; head -80 "$f"
+          echo "RESULT: THE APP DIED"
+          echo
+          echo "=========== CRASH REPORT ==========="
+          FOUND=0
+          for f in ~/Library/Logs/DiagnosticReports/App-*.ips; do
+            [ -e "$f" ] || continue
+            FOUND=1
+            # The first JSON line is metadata; the useful part is exceptionType,
+            # termination reason and the crashed thread.
+            grep -oE '"exceptionType"[^,]*|"signal"[^,]*|"reason"[^,]*|"terminationReason"[^,]*' "$f" | head -8
+            echo "--- first frames ---"
+            grep -oE '"imageIndex"[^}]*' "$f" | head -5
           done
-          echo "----- any exception in the whole system log -----"
-          xcrun simctl spawn "$UDID" log show --last 3m --style compact 2>/dev/null | grep -iE "Unknown class|NSInvalidArgument|uncaught exception|Terminating|SIGABRT|dyld|Library not loaded|Symbol not found" | head -30 || true
-          [ "$ALIVE" = "1" ] || { echo "FAIL: the app does not stay running"; exit 1; }
+          [ "$FOUND" = "1" ] || echo "(no .ips crash report - the app exited without crashing)"
+          echo
+          echo "=========== WHAT THE APP ITSELF LOGGED ==========="
+          xcrun simctl spawn "$UDID" log show --last 3m --style compact --predicate 'processImagePath CONTAINS "App.app"' 2>/dev/null | tail -40 || true
+          echo
+          echo "=========== HARD FAILURE SIGNATURES ==========="
+          xcrun simctl spawn "$UDID" log show --last 3m --style compact 2>/dev/null > /tmp/full.log || true
+          grep -aiE "Unknown class|uncaught exception|NSInvalidArgument|Library not loaded|Symbol not found|dyld[|Fatal error|SIGABRT|EXC_" /tmp/full.log | head -20 || echo "(none found)"
+          exit 1
+
+      - name: Upload crash reports
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: crash-reports
+          path: |
+            ~/Library/Logs/DiagnosticReports/App-*.ips
+            /tmp/full.log
+          if-no-files-found: ignore
 
       - name: Package the .app for Appetize
         run: |
