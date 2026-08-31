@@ -99,32 +99,41 @@ jobs:
       # app can start - storyboard wiring, missing Info.plist keys and bad
       # selectors all fail at runtime. So actually boot a simulator and launch
       # it, then dump whatever iOS logged. Non-fatal: we want the log either way.
-      - name: Launch it in a simulator and capture any crash
-        continue-on-error: true
+      # The previous version of this step launched with --console-pty and then
+      # KILLED that process, so "not running" proved nothing and a green result
+      # was meaningless. Launch DETACHED, let it live, then check whether the
+      # process is still alive and dump any crash report. Fails the job if the
+      # app died - a build that cannot stay running is not a passing build.
+      - name: Launch in a simulator and prove it stays running
         run: |
-          set +e
-          UDID=$(xcrun simctl list devices available | grep -m1 -oE "iPhone [0-9]+[^(]*\(([0-9A-F-]{36})\)" | grep -oE "[0-9A-F-]{36}")
-          if [ -z "$UDID" ]; then UDID=$(xcrun simctl list devices available | grep -m1 -oE "[0-9A-F]{8}-[0-9A-F-]{27}"); fi
+          set -e
+          UDID=$(xcrun simctl list devices available | grep -m1 -oE "[0-9A-F]{8}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{12}")
           echo "simulator: $UDID"
-          xcrun simctl boot "$UDID"
+          xcrun simctl boot "$UDID" || true
           xcrun simctl bootstatus "$UDID" -b
           APP=ios/App/build/Build/Products/Debug-iphonesimulator/App.app
-          xcrun simctl install "$UDID" "$APP" && echo "installed OK"
-          echo "----- launching -----"
-          xcrun simctl launch --console-pty "$UDID" it.ustyle.portal &
-          LAUNCH_PID=$!
+          xcrun simctl install "$UDID" "$APP"
+          BEFORE=$(date +%s)
+          PID=$(xcrun simctl launch "$UDID" it.ustyle.portal | sed "s/.*: //")
+          echo "launched with pid $PID"
           sleep 20
-          kill $LAUNCH_PID 2>/dev/null
-          echo "----- is it still running? -----"
-          xcrun simctl spawn "$UDID" launchctl list 2>/dev/null | grep -i ustyle || echo "NOT RUNNING (it exited)"
-          echo "----- system log for the app -----"
-          xcrun simctl spawn "$UDID" log show --last 2m --style compact 2>/dev/null | grep -iE "ustyle|PortalViewController|Unknown class|NSInvalidArgument|fatal|Terminating|exception" | head -40
+          echo "----- alive after 20s? -----"
+          if xcrun simctl spawn "$UDID" launchctl list 2>/dev/null | grep -q it.ustyle.portal; then
+            echo "STILL RUNNING - the app survived launch"
+            ALIVE=1
+          else
+            echo "DEAD - the app exited"
+            ALIVE=0
+          fi
+          echo "----- everything the app logged -----"
+          xcrun simctl spawn "$UDID" log show --last 3m --style compact --predicate 'processImagePath CONTAINS "App.app"' 2>/dev/null | tail -60 || true
           echo "----- crash reports -----"
-          ls -1 ~/Library/Logs/DiagnosticReports/ 2>/dev/null | head
-          for f in ~/Library/Logs/DiagnosticReports/App*.ips; do
-            [ -e "$f" ] || continue
-            echo "=== $f ==="; head -60 "$f"
+          find ~/Library/Logs/DiagnosticReports -name "App*" -newermt "-10 minutes" 2>/dev/null | while read f; do
+            echo "=== $f ==="; head -80 "$f"
           done
+          echo "----- any exception in the whole system log -----"
+          xcrun simctl spawn "$UDID" log show --last 3m --style compact 2>/dev/null | grep -iE "Unknown class|NSInvalidArgument|uncaught exception|Terminating|SIGABRT|dyld|Library not loaded|Symbol not found" | head -30 || true
+          [ "$ALIVE" = "1" ] || { echo "FAIL: the app does not stay running"; exit 1; }
 
       - name: Package the .app for Appetize
         run: |
