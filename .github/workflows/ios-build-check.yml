@@ -1,0 +1,68 @@
+# Compile-check the iOS app on a macOS runner (US-1612).
+#
+# This exists because the iOS source was written on Windows and has never been
+# through a compiler. It builds for the SIMULATOR with signing disabled, so it
+# needs NO Apple Developer account and NO certificates — the only question it
+# answers is "does the Swift compile", which is the one that matters right now.
+#
+# Producing an installable .ipa is a separate job that DOES need an Apple
+# account; add it once this one is green.
+name: iOS build check
+
+on:
+  push:
+    paths:
+      - 'ios/**'
+      - 'package.json'
+      - 'capacitor.config.ts'
+      - '.github/workflows/ios-build-check.yml'
+  workflow_dispatch:        # lets you run it by hand from the Actions tab
+
+jobs:
+  compile:
+    # macOS runners are billed at 10x on private repos — this job is deliberately
+    # small, and `paths:` above keeps it from running on Android-only commits.
+    runs-on: macos-14
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      # Copies web assets and plugin definitions into the native project.
+      # NEVER `cap add ios` here — that regenerates the folder and would wipe
+      # PortalViewController.swift and the storyboard/Info.plist changes.
+      - name: Capacitor sync
+        run: npx cap sync ios
+
+      - name: Show Xcode version
+        run: xcodebuild -version
+
+      - name: Build for the Simulator (no signing)
+        run: |
+          cd ios/App
+          xcodebuild \
+            -scheme App \
+            -sdk iphonesimulator \
+            -destination 'generic/platform=iOS Simulator' \
+            -configuration Debug \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            build \
+            | tee build.log
+        # `set -o pipefail` is not on by default in a bash step, so without this
+        # a failing xcodebuild would be masked by tee's exit code.
+        shell: bash --noprofile --norc -eo pipefail {0}
+
+      - name: Upload the build log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: xcodebuild-log
+          path: ios/App/build.log
