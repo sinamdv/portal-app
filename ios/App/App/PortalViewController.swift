@@ -60,6 +60,25 @@ class PortalViewController: CAPBridgeViewController {
         observeAppState()
     }
 
+    /**
+     Keep the webview OUT of the notch and home-indicator bands.
+
+     The portal draws its overlays with `position: fixed; inset: 0`, which spans
+     the WEBVIEW — not the safe area. So if the webview covers the full screen,
+     the gallery lightbox's close button renders underneath the status bar and
+     Dynamic Island, where the system swallows the tap and it simply does not
+     work. Insetting the webview itself fixes every such overlay at once and
+     needs no change to the portal.
+
+     Android does not need this: its status bar already sits clear of content.
+     */
+    override func viewDidLayoutSubviews() {
+        super.viewDidLayoutSubviews()
+        guard let webView = webView else { return }
+        let inset = view.bounds.inset(by: view.safeAreaInsets)
+        if webView.frame != inset { webView.frame = inset }
+    }
+
     override func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
         evaluateLock()
@@ -77,7 +96,10 @@ class PortalViewController: CAPBridgeViewController {
         webView?.isOpaque = false
         webView?.backgroundColor = .clear
         webView?.scrollView.backgroundColor = .clear
-        webView?.scrollView.contentInsetAdjustmentBehavior = .always
+        // .never, not .always: the frame is already inset to the safe area in
+        // viewDidLayoutSubviews, so letting the scroll view add its own inset on
+        // top would push the content down twice.
+        webView?.scrollView.contentInsetAdjustmentBehavior = .never
     }
 
     // MARK: - Pull to refresh
