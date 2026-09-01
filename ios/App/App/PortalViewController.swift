@@ -86,6 +86,7 @@ class PortalViewController: CAPBridgeViewController {
             configuredWebView = true
             applySafeAreaBackground()
             addPullToRefresh()
+            lockZoom()
         }
 
         // NOTE: do NOT try to inset webView.frame here. Capacitor pins the
@@ -151,6 +152,37 @@ class PortalViewController: CAPBridgeViewController {
         webView?.scrollView.bouncesZoom = false
         // Stop sideways rubber-banding on a page that fits exactly.
         webView?.scrollView.alwaysBounceHorizontal = false
+    }
+
+
+    /**
+     Stop the page zooming — for real.
+
+     Disabling the pinch recogniser is not enough: WKWebView also zooms on
+     DOUBLE TAP, through a separate path. The only reliable way is to tell the
+     page itself, by adding maximum-scale to its viewport meta.
+
+     Done from the APP, not the portal: pinch-zooming a try-on photo is
+     legitimate on mobile web and removing it there would cost accessibility for
+     every browser visitor. In an app it just reads as a broken layout that
+     scrolls sideways.
+     */
+    private func lockZoom() {
+        guard let webView = webView else { return }
+        let js = """
+        (function () {
+          var m = document.querySelector('meta[name=viewport]');
+          if (!m) { m = document.createElement('meta'); m.name = 'viewport'; document.head.appendChild(m); }
+          if (m.content.indexOf('maximum-scale') === -1) {
+            m.content = m.content + ', maximum-scale=1, user-scalable=no';
+          }
+        })();
+        """
+        // For every future navigation…
+        webView.configuration.userContentController.addUserScript(
+            WKUserScript(source: js, injectionTime: .atDocumentEnd, forMainFrameOnly: true))
+        // …and for the page that is already on screen.
+        webView.evaluateJavaScript(js)
     }
 
     // MARK: - Pull to refresh
