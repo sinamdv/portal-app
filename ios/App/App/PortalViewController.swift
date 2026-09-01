@@ -88,8 +88,10 @@ class PortalViewController: CAPBridgeViewController {
             addPullToRefresh()
         }
 
-        let inset = view.bounds.inset(by: view.safeAreaInsets)
-        if webView.frame != inset { webView.frame = inset }
+        // NOTE: do NOT try to inset webView.frame here. Capacitor pins the
+        // webview with Auto Layout, so any frame assignment is overwritten on
+        // the next layout pass - it silently does nothing. Safe-area insets
+        // are handled in CSS by the portal instead.
 
         if !reportedLayout {
             reportedLayout = true
@@ -134,10 +136,9 @@ class PortalViewController: CAPBridgeViewController {
         webView?.isOpaque = false
         webView?.backgroundColor = .clear
         webView?.scrollView.backgroundColor = .clear
-        // .never, not .always: the frame is already inset to the safe area in
-        // viewDidLayoutSubviews, so letting the scroll view add its own inset on
-        // top would push the content down twice.
-        webView?.scrollView.contentInsetAdjustmentBehavior = .never
+        // Left at the system default on purpose. Setting .never disabled
+        // WebKit's own safe-area handling and made the top inset worse; the
+        // portal now handles insets itself via viewportFit:"cover" + env().
 
         // An APP should not pinch-zoom like a web page. The portal's viewport
         // meta sets width=device-width with no maximum-scale, so WKWebView
