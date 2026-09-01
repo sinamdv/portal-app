@@ -24,7 +24,10 @@ const config: CapacitorConfig = {
     //   3. the portal is server-rendered (SSR + Cosmos + PostHog) — a static
     //      export is not possible at all.
     // Proven end to end in the Phase 0 spike on both platforms.
-    url: 'https://ustyle.it/portal',
+    // TEMPORARY - throwaway branch. Points at a cloudflared quick tunnel to the
+    // local dev portal so the safe-area CSS can be tested before deploying.
+    // NEVER merge this branch.
+    url: 'https://leasing-food-legislation-string.trycloudflare.com/portal',
     cleartext: false,
   },
 
